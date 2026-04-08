@@ -1,0 +1,2352 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>快递账单助手 - Express Bill Assistant</title>
+    <!-- 第三方依赖CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+
+        :root {
+            --primary-color: #8B0000;
+            --secondary-color: #f5f5f5;
+            --border-color: #ddd;
+            --text-color: #333;
+            --light-text: #666;
+            --success-color: #52c41a;
+            --error-color: #ff4d4f;
+            --warning-color: #faad14;
+            --drop-highlight: #fff2f0;
+            --info-color: #1890ff;
+        }
+
+        body {
+            background-color: #fafafa;
+            color: var(--text-color);
+            line-height: 1.6;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* 标题区域 */
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--primary-color);
+        }
+
+        .header h1 {
+            color: var(--primary-color);
+            font-size: 28px;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: var(--light-text);
+            font-size: 14px;
+        }
+
+        /* 主Tab样式 */
+        .main-tabs {
+            display: flex;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 20px;
+            gap: 2px;
+        }
+
+        .main-tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: var(--secondary-color);
+            font-size: 16px;
+            font-weight: 500;
+            border-radius: 6px 6px 0 0;
+            transition: all 0.3s;
+        }
+
+        .main-tab.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .main-tab:hover:not(.active) {
+            background: #e8e8e8;
+        }
+
+        .tab-content {
+            display: none;
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            min-height: 500px;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* 子Tab样式 */
+        .sub-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 20px;
+            gap: 2px;
+        }
+
+        .sub-tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .sub-tab.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        .sub-tab-content {
+            display: none;
+        }
+
+        .sub-tab-content.active {
+            display: block;
+        }
+
+        /* 上传区域 */
+        .upload-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .upload-area:hover, .upload-area.dragover {
+            border-color: var(--primary-color);
+            background: var(--drop-highlight);
+        }
+
+        .upload-area p {
+            margin: 10px 0;
+            color: var(--light-text);
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        /* 上传文件信息显示 */
+        .upload-file-info {
+            margin-top: 20px;
+            padding: 12px 16px;
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+            border-radius: 4px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .upload-file-info.show {
+            display: flex;
+        }
+
+        .upload-file-info.offline {
+            background: #e6f7ff;
+            border: 1px solid #91d5ff;
+        }
+
+        .upload-file-info .file-icon {
+            font-size: 20px;
+            color: var(--success-color);
+        }
+
+        .upload-file-info.offline .file-icon {
+            color: var(--info-color);
+        }
+
+        .upload-file-info .file-name {
+            font-weight: 500;
+            color: var(--text-color);
+            word-break: break-all;
+        }
+
+        .upload-file-info .file-label {
+            color: var(--light-text);
+            font-size: 14px;
+        }
+
+        /* 按钮样式 */
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+            margin: 0 4px 4px 0;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #6a0000;
+        }
+
+        .btn-default {
+            background: var(--secondary-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-default:hover {
+            background: #e8e8e8;
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #49aa19;
+        }
+
+        .btn-danger {
+            background: var(--error-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #ff383f;
+        }
+
+        .btn-warning {
+            background: var(--warning-color);
+            color: white;
+        }
+
+        .btn-warning:hover {
+            background: #e69a0e;
+        }
+
+        .btn-info {
+            background: var(--info-color);
+            color: white;
+        }
+
+        .btn-info:hover {
+            background: #0f7acc;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* 列表样式 */
+        .list-container {
+            margin-top: 20px;
+        }
+
+        .list-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .list-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            margin-bottom: 8px;
+            transition: all 0.3s;
+        }
+
+        .list-item:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .list-item-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* 拖拽相关样式 */
+        .header-blocks {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 20px 0;
+            padding: 16px;
+            background: var(--secondary-color);
+            border-radius: 4px;
+            min-height: 80px;
+        }
+
+        .header-block {
+            padding: 6px 12px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            cursor: grab;
+            font-size: 13px;
+            user-select: none;
+        }
+
+        .header-block:active {
+            cursor: grabbing;
+        }
+
+        .drop-areas {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin: 20px 0;
+        }
+
+        .drop-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            min-height: 120px;
+            transition: all 0.3s;
+        }
+
+        .drop-area.dragover {
+            border-color: var(--primary-color);
+            background: var(--drop-highlight);
+        }
+
+        .drop-area h4 {
+            margin-bottom: 12px;
+            color: var(--primary-color);
+            font-size: 14px;
+        }
+
+        .drop-content {
+            min-height: 60px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .config-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 8px;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            width: 100%;
+        }
+
+        .config-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .config-row label {
+            font-size: 13px;
+            color: var(--light-text);
+        }
+
+        .config-row select, .config-row input {
+            padding: 4px 8px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        /* Sheet切换样式 */
+        .sheet-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+
+        .sheet-tab {
+            padding: 6px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .sheet-tab.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .sheet-tab.configured::after {
+            content: "✓";
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            width: 16px;
+            height: 16px;
+            background: var(--success-color);
+            color: white;
+            border-radius: 50%;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 表单样式 */
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        /* 结果卡片样式 */
+        .result-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+
+        .result-card {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .result-card h3 {
+            color: var(--primary-color);
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .card-info {
+            margin-bottom: 12px;
+        }
+
+        .card-info p {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+            font-size: 14px;
+        }
+
+        .card-info p span:first-child {
+            color: var(--light-text);
+        }
+
+        .card-info p span:last-child {
+            font-weight: 500;
+        }
+
+        /* 提示消息样式 */
+        .message {
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin: 16px 0;
+            font-size: 14px;
+        }
+
+        .message-success {
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+            color: var(--success-color);
+        }
+
+        .message-error {
+            background: #fff2f0;
+            border: 1px solid #ffccc7;
+            color: var(--error-color);
+        }
+
+        .message-warning {
+            background: #fffbe6;
+            border: 1px solid #ffe58f;
+            color: #d48806;
+        }
+
+        .message-loading {
+            background: #e6f7ff;
+            border: 1px solid #91d5ff;
+            color: #1890ff;
+        }
+
+        .message-info {
+            background: #e6f7ff;
+            border: 1px solid #91d5ff;
+            color: #1890ff;
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 响应式适配 */
+        @media (max-width: 768px) {
+            .drop-areas {
+                grid-template-columns: 1fr;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .result-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .main-tab {
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>快递账单助手 - Express Bill Assistant</h1>
+        <p>纯前端商家快递账单自动生成工具 | 版本 1.7 | 离线编辑配置优化 | 刷新页面可直接编辑已保存配置</p>
+    </div>
+
+    <!-- 主Tab导航 -->
+    <div class="main-tabs">
+        <button class="main-tab active" data-tab="quotation">快递报价表管理</button>
+        <button class="main-tab" data-tab="config">聚合账单配置管理</button>
+        <button class="main-tab" data-tab="generate">对账单生成与导出</button>
+    </div>
+
+    <!-- 1. 快递报价表管理Tab -->
+    <div class="tab-content active" id="quotation-tab">
+        <div class="sub-tabs">
+            <button class="sub-tab active" data-subtab="quotation-import">导入快递报价表</button>
+            <button class="sub-tab" data-subtab="quotation-manage">管理快递报价表</button>
+        </div>
+
+        <!-- 导入报价表子Tab -->
+        <div class="sub-tab-content active" id="quotation-import-content">
+            <div class="upload-area" id="quotation-upload-area">
+                <h3>拖拽快递报价表(表A)到此处上传</h3>
+                <p>支持 .xlsx .xls 格式文件，系统将自动识别报价关键字段</p>
+                <button class="btn btn-primary">点击选择文件</button>
+                <input type="file" id="quotation-file-input" accept=".xlsx,.xls">
+            </div>
+            <div id="quotation-import-message"></div>
+        </div>
+
+        <!-- 管理报价表子Tab -->
+        <div class="sub-tab-content" id="quotation-manage-content">
+            <div class="list-header">
+                <div>
+                    <input type="checkbox" id="quotation-select-all">
+                    <label for="quotation-select-all">全选</label>
+                </div>
+                <div>
+                    <button class="btn btn-default" id="quotation-batch-download">批量下载</button>
+                    <button class="btn btn-danger" id="quotation-batch-delete">批量删除</button>
+                </div>
+            </div>
+            <div class="list-container" id="quotation-list"></div>
+        </div>
+    </div>
+
+    <!-- 2. 聚合账单配置管理Tab -->
+    <div class="tab-content" id="config-tab">
+        <!-- 聚合账单上传区域 -->
+        <div class="upload-area" id="bill-upload-area">
+            <h3>拖拽聚合账单(表B)到此处上传</h3>
+            <p>支持 .xlsx .xls 格式文件，可包含多个工作表(Sheet)，每个工作表配置独立</p>
+            <button class="btn btn-primary">点击选择文件</button>
+            <input type="file" id="bill-file-input" accept=".xlsx,.xls">
+            
+            <!-- 上传文件信息显示 -->
+            <div class="upload-file-info" id="bill-file-info">
+                <span class="file-icon" id="file-info-icon">📄</span>
+                <span class="file-label" id="file-info-label">已上传文件：</span>
+                <span class="file-name" id="bill-file-name"></span>
+            </div>
+        </div>
+
+        <!-- 子Tab导航 -->
+        <div class="sub-tabs">
+            <button class="sub-tab active" data-subtab="config-manual">手动配置</button>
+            <button class="sub-tab" data-subtab="config-manage">配置管理</button>
+        </div>
+
+        <!-- 手动配置子Tab -->
+        <div class="sub-tab-content active" id="config-manual-content">
+            <div class="form-group">
+                <label for="config-name">配置名称</label>
+                <input type="text" id="config-name" placeholder="请输入配置名称，便于后续复用">
+            </div>
+
+            <div id="bill-sheet-tabs" class="sheet-tabs" style="display: none;"></div>
+            <div id="config-message"></div>
+
+            <div id="header-blocks-container" style="display: none;">
+                <h4>可拖拽表头字段</h4>
+                <div class="header-blocks" id="header-blocks"></div>
+            </div>
+
+            <div id="drop-areas-container" style="display: none;">
+                <h4>配置规则（当前工作表：<span id="current-sheet-name" style="color: var(--primary-color);">未选择</span>）</h4>
+                <p style="font-size: 12px; color: var(--light-text); margin-bottom: 16px;">每个工作表配置独立，切换工作表将自动保存当前配置，至少配置一个区域即可</p>
+                <div class="drop-areas">
+                    <div class="drop-area" id="merchant-drop-area">
+                        <h4>📌 商家名称区域（仅可拖入1个）</h4>
+                        <p style="font-size: 12px; color: var(--light-text); margin-bottom: 8px;">指定用于匹配报价表中商家名称的列</p>
+                        <div class="drop-content" id="merchant-drop-content"></div>
+                    </div>
+
+                    <div class="drop-area" id="freight-drop-area">
+                        <h4>💰 运费计算区域（仅可拖入1个）</h4>
+                        <p style="font-size: 12px; color: var(--light-text); margin-bottom: 8px;">指定自动计算运费的列，需配套选择重量和目的地列</p>
+                        <div class="drop-content" id="freight-drop-content"></div>
+                    </div>
+
+                    <div class="drop-area" id="subtotal-drop-area">
+                        <h4>📊 运费小计区域（可拖入多个）</h4>
+                        <p style="font-size: 12px; color: var(--light-text); margin-bottom: 8px;">指定自定义公式计算的列，支持表头字段加减乘除</p>
+                        <div class="drop-content" id="subtotal-drop-content"></div>
+                    </div>
+
+                    <div class="drop-area" id="total-drop-area">
+                        <h4>🧮 合计区域（可拖入多个）</h4>
+                        <p style="font-size: 12px; color: var(--light-text); margin-bottom: 8px;">指定需要在表格底部添加合计行的列，汇总表将自动累加该列总和</p>
+                        <div class="drop-content" id="total-drop-content"></div>
+                    </div>
+                </div>
+
+                <div style="text-align: center; margin-top: 30px;">
+                    <button class="btn btn-primary btn-lg" id="save-config-btn" style="padding: 12px 40px; font-size: 16px;">保存配置规则</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 配置管理子Tab -->
+        <div class="sub-tab-content" id="config-manage-content">
+            <div class="list-header">
+                <div>
+                    <input type="checkbox" id="config-select-all">
+                    <label for="config-select-all">全选</label>
+                </div>
+                <div>
+                    <button class="btn btn-default" id="config-import-btn">导入配置(JSON)</button>
+                    <input type="file" id="config-file-input" accept=".json" style="display: none;">
+                    <button class="btn btn-default" id="config-batch-download">批量下载</button>
+                    <button class="btn btn-danger" id="config-batch-delete">批量删除</button>
+                </div>
+            </div>
+            <div class="list-container" id="config-list"></div>
+        </div>
+    </div>
+
+    <!-- 3. 对账单生成与导出Tab -->
+    <div class="tab-content" id="generate-tab">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="generate-merchant">目标商家选择</label>
+                <select id="generate-merchant">
+                    <option value="">请选择商家</option>
+                    <option value="all">全部已导入商家</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="generate-config">配置规则选择</label>
+                <select id="generate-config">
+                    <option value="">请选择配置</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="generate-month">账单月份</label>
+                <input type="month" id="generate-month">
+            </div>
+        </div>
+
+        <div style="text-align: center; margin: 20px 0;">
+            <button class="btn btn-primary btn-lg" id="generate-bill-btn" style="padding: 12px 40px; font-size: 16px;">📄 制作对账单</button>
+        </div>
+
+        <div id="generate-message"></div>
+
+        <div id="generate-result-container" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3>生成结果</h3>
+                <button class="btn btn-success" id="download-all-btn">全部下载(ZIP压缩包)</button>
+            </div>
+            <div class="result-cards" id="result-cards"></div>
+        </div>
+    </div>
+
+    <script>
+        // ===================== 全局变量 =====================
+        let currentAggregateBill = null; // 当前解析的聚合账单(表B)数据
+        let currentSheetIndex = 0; // 当前选中的Sheet索引
+        let currentHeaders = []; // 当前Sheet的表头列表
+        let currentSheetConfigs = {}; // 核心：当前文件所有Sheet的独立配置，key为Sheet名称
+        let generatedBills = {}; // 生成的账单数据
+        let isOfflineEditMode = false; // 离线编辑模式标记
+        const QUOTATION_STORAGE_KEY = 'express_quotation_tables';
+        const CONFIG_STORAGE_KEY = 'express_bill_configs';
+        // 报价表关键字段
+        const QUOTATION_KEY_FIELDS = [
+            '商家名称', '目的地', '0-0.5Kg', '0.51-1Kg', '1.01-2Kg', '2.01-3Kg',
+            '3.01-30kg首重', '3.01-30kg续重', '30kg以上首重', '30kg以上续重', '序号'
+        ];
+
+        // ===================== 核心工具函数 =====================
+        // 从配置生成虚拟账单数据（解决刷新后无法编辑的核心函数）
+        function generateVirtualBillFromConfig(config) {
+            const virtualBill = [];
+            // 兼容旧版单Sheet配置
+            if (!config.sheetConfigs) {
+                virtualBill.push({
+                    name: '默认工作表',
+                    rows: [
+                        [undefined, ...(config.headers || [])]
+                    ]
+                });
+                return virtualBill;
+            }
+            // 新版多Sheet配置
+            Object.keys(config.sheetConfigs).forEach(sheetName => {
+                const sheetConfig = config.sheetConfigs[sheetName];
+                virtualBill.push({
+                    name: sheetName,
+                    rows: [
+                        [undefined, ...(sheetConfig.headers || [])]
+                    ]
+                });
+            });
+            return virtualBill;
+        }
+
+        // 重置文件信息显示
+        function resetFileInfo() {
+            const fileInfo = document.getElementById('bill-file-info');
+            const fileNameDisplay = document.getElementById('bill-file-name');
+            const fileIcon = document.getElementById('file-info-icon');
+            const fileLabel = document.getElementById('file-info-label');
+            
+            fileInfo.classList.remove('show', 'offline');
+            fileNameDisplay.textContent = '';
+            fileIcon.textContent = '📄';
+            fileLabel.textContent = '已上传文件：';
+        }
+
+        // 设置离线编辑模式的文件信息
+        function setOfflineFileInfo(configName) {
+            const fileInfo = document.getElementById('bill-file-info');
+            const fileNameDisplay = document.getElementById('bill-file-name');
+            const fileIcon = document.getElementById('file-info-icon');
+            const fileLabel = document.getElementById('file-info-label');
+            
+            fileInfo.classList.add('show', 'offline');
+            fileNameDisplay.textContent = configName;
+            fileIcon.textContent = '⚙️';
+            fileLabel.textContent = '离线编辑配置：';
+        }
+
+        // 消息提示
+        function showMessage(content, type = 'default') {
+            const messageContainer = document.createElement('div');
+            messageContainer.className = `message message-${type}`;
+            messageContainer.textContent = content;
+            
+            // 找到当前激活的Tab的消息容器
+            const activeTab = document.querySelector('.main-tab.active').dataset.tab;
+            let targetContainer;
+            if (activeTab === 'quotation') {
+                targetContainer = document.getElementById('quotation-import-message');
+            } else if (activeTab === 'config') {
+                targetContainer = document.getElementById('config-message');
+            } else {
+                targetContainer = document.getElementById('generate-message');
+            }
+            
+            targetContainer.innerHTML = '';
+            targetContainer.appendChild(messageContainer);
+            
+            // 3秒后自动消失
+            if (type !== 'loading') {
+                setTimeout(() => {
+                    messageContainer.remove();
+                }, 4000);
+            }
+            
+            return messageContainer;
+        }
+
+        // 日期格式化 YYYYMMDD
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}${month}${day}`;
+        }
+
+        // 重量向上取整
+        function ceilWeight(weight) {
+            if (isNaN(weight) || weight <= 0) return 0;
+            return Math.ceil(weight);
+        }
+
+        // 核心运费计算函数
+        function calculateFreight(weight, destination, quotation) {
+            const w = ceilWeight(weight);
+            if (w === 0) return 0;
+
+            // 匹配目的地报价
+            const destQuotation = quotation.find(item => {
+                const itemDest = String(item['目的地'] || '').trim();
+                const targetDest = String(destination || '').trim();
+                return itemDest && targetDest && itemDest.includes(targetDest) || targetDest.includes(itemDest);
+            });
+
+            if (!destQuotation) {
+                console.warn(`未找到目的地【${destination}】的报价`);
+                return 0;
+            }
+
+            // 按区间计算
+            if (weight <= 0.5) {
+                return Number(destQuotation['0-0.5Kg']) || 0;
+            } else if (weight <= 1) {
+                return Number(destQuotation['0.51-1Kg']) || 0;
+            } else if (weight <= 2) {
+                return Number(destQuotation['1.01-2Kg']) || 0;
+            } else if (weight <= 3) {
+                return Number(destQuotation['2.01-3Kg']) || 0;
+            } else if (weight <= 30) {
+                const firstWeight = Number(destQuotation['3.01-30kg首重']) || 0;
+                const continueWeight = Number(destQuotation['3.01-30kg续重']) || 0;
+                return w <= 1 ? firstWeight : firstWeight + (w - 1) * continueWeight;
+            } else {
+                const firstWeight = Number(destQuotation['30kg以上首重']) || 0;
+                const continueWeight = Number(destQuotation['30kg以上续重']) || 0;
+                return w <= 1 ? firstWeight : firstWeight + (w - 1) * continueWeight;
+            }
+        }
+
+        // 公式计算
+        function calculateFormula(formula, rowData) {
+            try {
+                // 替换表头变量为对应的值
+                let expression = formula.replace(/h\d+/g, match => {
+                    const value = rowData[match] || 0;
+                    return Number(value) || 0;
+                });
+                // 执行计算
+                return eval(expression);
+            } catch (e) {
+                console.error('公式计算错误', e);
+                return 0;
+            }
+        }
+
+        // 清空所有配置区域
+        function clearAllDropAreas() {
+            document.querySelectorAll('.drop-content').forEach(content => {
+                content.innerHTML = '';
+            });
+        }
+
+        // 从界面获取当前Sheet的配置
+        function getCurrentSheetConfig() {
+            const currentSheetName = currentAggregateBill[currentSheetIndex]?.name;
+            if (!currentSheetName) return null;
+
+            // 获取商家名称字段
+            const merchantField = document.querySelector('#merchant-drop-content .config-item')?.dataset.field;
+
+            // 获取运费配置
+            const freightItem = document.querySelector('#freight-drop-content .config-item');
+            const freightField = freightItem?.dataset.field;
+            const weightField = freightItem?.querySelector('.weight-select')?.value;
+            const destinationField = freightItem?.querySelector('.destination-select')?.value;
+
+            // 获取运费小计配置
+            const subtotalItems = document.querySelectorAll('#subtotal-drop-content .config-item');
+            const subtotalFields = [];
+            subtotalItems.forEach(item => {
+                const field = item.dataset.field;
+                const formula = item.querySelector('.formula-input').value.trim();
+                if (field && formula) {
+                    subtotalFields.push({ field, formula });
+                }
+            });
+
+            // 获取合计字段
+            const totalItems = document.querySelectorAll('#total-drop-content .config-item');
+            const totalFields = Array.from(totalItems).map(item => item.dataset.field);
+
+            return {
+                merchantField: merchantField,
+                freightField: freightField,
+                weightField: weightField,
+                destinationField: destinationField,
+                subtotalFields: subtotalFields,
+                totalFields: totalFields,
+                headers: currentHeaders
+            };
+        }
+
+        // 将配置渲染到界面
+        function renderConfigToUI(config) {
+            clearAllDropAreas();
+            if (!config) return;
+
+            // 还原商家名称区域
+            if (config.merchantField) {
+                const merchantContent = document.getElementById('merchant-drop-content');
+                const fieldIndex = parseInt(config.merchantField.replace('h', '')) - 1;
+                const header = config.headers[fieldIndex] || `列${fieldIndex + 1}`;
+                
+                const configItem = createConfigItem(config.merchantField, header);
+                merchantContent.appendChild(configItem);
+            }
+
+            // 还原运费区域
+            if (config.freightField) {
+                const freightContent = document.getElementById('freight-drop-content');
+                const fieldIndex = parseInt(config.freightField.replace('h', '')) - 1;
+                const header = config.headers[fieldIndex] || `列${fieldIndex + 1}`;
+                
+                const configItem = createConfigItem(config.freightField, header);
+                // 添加重量和目的地选择
+                const weightRow = document.createElement('div');
+                weightRow.className = 'config-row';
+                weightRow.innerHTML = `
+                    <label>重量列：</label>
+                    <select class="weight-select">
+                        ${config.headers.map((h, idx) => `
+                            <option value="h${idx + 1}" ${config.weightField === `h${idx + 1}` ? 'selected' : ''}>h${idx + 1}: ${h}</option>
+                        `).join('')}
+                    </select>
+                    <label>目的地列：</label>
+                    <select class="destination-select">
+                        ${config.headers.map((h, idx) => `
+                            <option value="h${idx + 1}" ${config.destinationField === `h${idx + 1}` ? 'selected' : ''}>h${idx + 1}: ${h}</option>
+                        `).join('')}
+                    </select>
+                `;
+                configItem.appendChild(weightRow);
+                freightContent.appendChild(configItem);
+            }
+
+            // 还原运费小计区域
+            if (config.subtotalFields && config.subtotalFields.length > 0) {
+                const subtotalContent = document.getElementById('subtotal-drop-content');
+                config.subtotalFields.forEach(item => {
+                    const fieldIndex = parseInt(item.field.replace('h', '')) - 1;
+                    const header = config.headers[fieldIndex] || `列${fieldIndex + 1}`;
+                    
+                    const configItem = createConfigItem(item.field, header);
+                    // 添加公式输入框
+                    const formulaRow = document.createElement('div');
+                    formulaRow.className = 'config-row';
+                    formulaRow.innerHTML = `
+                        <label>计算公式：</label>
+                        <input type="text" class="formula-input" value="${item.formula}" style="flex: 1;">
+                    `;
+                    configItem.appendChild(formulaRow);
+                    subtotalContent.appendChild(configItem);
+                });
+            }
+
+            // 还原合计区域
+            if (config.totalFields && config.totalFields.length > 0) {
+                const totalContent = document.getElementById('total-drop-content');
+                config.totalFields.forEach(field => {
+                    const fieldIndex = parseInt(field.replace('h', '')) - 1;
+                    const header = config.headers[fieldIndex] || `列${fieldIndex + 1}`;
+                    
+                    const configItem = createConfigItem(field, header);
+                    totalContent.appendChild(configItem);
+                });
+            }
+        }
+
+        // 创建配置项DOM
+        function createConfigItem(field, header) {
+            const configItem = document.createElement('div');
+            configItem.className = 'config-item';
+            configItem.dataset.field = field;
+            configItem.dataset.header = header;
+
+            // 基础头部
+            const headerRow = document.createElement('div');
+            headerRow.className = 'config-row';
+            headerRow.innerHTML = `
+                <div class="header-block" style="margin: 0;">${field}: ${header}</div>
+                <button type="button" class="btn btn-danger btn-sm remove-btn" style="padding: 4px 8px; font-size: 12px;">删除</button>
+            `;
+            configItem.appendChild(headerRow);
+
+            // 删除按钮事件
+            headerRow.querySelector('.remove-btn').addEventListener('click', () => {
+                configItem.remove();
+            });
+
+            return configItem;
+        }
+
+        // 更新Sheet标签的已配置标记
+        function updateSheetConfigMark() {
+            document.querySelectorAll('.sheet-tab').forEach(tab => {
+                const sheetName = tab.dataset.name;
+                const config = currentSheetConfigs[sheetName];
+                // 判断是否已配置
+                const isConfigured = config && (
+                    config.merchantField || 
+                    config.freightField || 
+                    config.subtotalFields.length > 0 || 
+                    config.totalFields.length > 0
+                );
+                if (isConfigured) {
+                    tab.classList.add('configured');
+                } else {
+                    tab.classList.remove('configured');
+                }
+            });
+        }
+
+        // ===================== 本地存储函数 =====================
+        // 保存报价表
+        function saveQuotation(merchantName, data) {
+            const allQuotations = getAllQuotations();
+            allQuotations[merchantName] = data;
+            localStorage.setItem(QUOTATION_STORAGE_KEY, JSON.stringify(allQuotations));
+        }
+
+        // 获取所有报价表
+        function getAllQuotations() {
+            const data = localStorage.getItem(QUOTATION_STORAGE_KEY);
+            return data ? JSON.parse(data) : {};
+        }
+
+        // 获取单个报价表
+        function getQuotation(merchantName) {
+            const allQuotations = getAllQuotations();
+            return allQuotations[merchantName] || null;
+        }
+
+        // 删除报价表
+        function deleteQuotation(merchantName) {
+            const allQuotations = getAllQuotations();
+            delete allQuotations[merchantName];
+            localStorage.setItem(QUOTATION_STORAGE_KEY, JSON.stringify(allQuotations));
+        }
+
+        // 保存配置
+        function saveConfig(configName, data) {
+            const allConfigs = getAllConfigs();
+            allConfigs[configName] = data;
+            localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(allConfigs));
+        }
+
+        // 获取所有配置
+        function getAllConfigs() {
+            const data = localStorage.getItem(CONFIG_STORAGE_KEY);
+            return data ? JSON.parse(data) : {};
+        }
+
+        // 获取单个配置
+        function getConfig(configName) {
+            const allConfigs = getAllConfigs();
+            return allConfigs[configName] || null;
+        }
+
+        // 删除配置
+        function deleteConfig(configName) {
+            const allConfigs = getAllConfigs();
+            delete allConfigs[configName];
+            localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(allConfigs));
+        }
+
+        // ===================== Excel解析函数 =====================
+        // 解析Excel文件
+        async function parseExcelFile(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    try {
+                        const buffer = e.target.result;
+                        const workbook = new ExcelJS.Workbook();
+                        await workbook.xlsx.load(buffer);
+                        
+                        const sheets = [];
+                        workbook.eachSheet((worksheet, sheetId) => {
+                            const rows = [];
+                            worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+                                rows.push(row.values);
+                            });
+                            sheets.push({
+                                name: worksheet.name,
+                                rows: rows
+                            });
+                        });
+                        resolve(sheets);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        // 智能解析报价表
+        function parseQuotationSheet(sheets) {
+            const merchantQuotations = {};
+
+            sheets.forEach(sheet => {
+                const rows = sheet.rows;
+                if (rows.length === 0) return;
+
+                // 找到表头行（包含最多关键字的行）
+                let headerRowIndex = -1;
+                let maxMatchCount = 0;
+                let headerMap = {};
+
+                for (let i = 0; i < Math.min(rows.length, 20); i++) {
+                    const row = rows[i];
+                    let matchCount = 0;
+                    const currentHeaderMap = {};
+
+                    for (let colIndex = 1; colIndex < row.length; colIndex++) {
+                        const cellValue = String(row[colIndex] || '').trim();
+                        if (!cellValue) continue;
+
+                        // 匹配关键字
+                        const matchedKey = QUOTATION_KEY_FIELDS.find(key => 
+                            cellValue.includes(key) || key.includes(cellValue)
+                        );
+                        if (matchedKey) {
+                            matchCount++;
+                            currentHeaderMap[matchedKey] = colIndex;
+                        }
+                    }
+
+                    if (matchCount > maxMatchCount) {
+                        maxMatchCount = matchCount;
+                        headerRowIndex = i;
+                        headerMap = currentHeaderMap;
+                    }
+                }
+
+                if (headerRowIndex === -1 || maxMatchCount < 3) {
+                    throw new Error('未识别到有效的报价表表头，请检查文件格式');
+                }
+
+                // 解析数据行
+                for (let i = headerRowIndex + 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    const merchantName = String(row[headerMap['商家名称']] || '').trim();
+                    if (!merchantName) continue;
+
+                    const quotationItem = {};
+                    Object.keys(headerMap).forEach(key => {
+                        quotationItem[key] = row[headerMap[key]] || '';
+                    });
+
+                    if (!merchantQuotations[merchantName]) {
+                        merchantQuotations[merchantName] = [];
+                    }
+                    merchantQuotations[merchantName].push(quotationItem);
+                }
+            });
+
+            return merchantQuotations;
+        }
+
+        // 生成Excel文件
+        async function generateExcelFile(merchantName, config, billData, month) {
+            const workbook = new ExcelJS.Workbook();
+            const dateStr = formatDate(new Date());
+            const monthStr = month.split('-')[1];
+
+            // 1. 创建汇总表 - 三列结构：项目、数量、费用
+            const summarySheet = workbook.addWorksheet('汇总表');
+            summarySheet.columns = [
+                { header: '项目', key: 'project', width: 30 },
+                { header: '数量', key: 'count', width: 15 },
+                { header: '费用', key: 'fee', width: 20 }
+            ];
+
+            // 设置表头样式
+            summarySheet.getRow(1).eachCell(cell => {
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B0000' } };
+                cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+            });
+
+            // 2. 创建各子表并收集汇总数据
+            const summaryData = [];
+
+            billData.forEach((sheetData) => {
+                const sheetName = sheetData.originalName;
+                const worksheet = workbook.addWorksheet(sheetName);
+                const sheetConfig = sheetData.sheetConfig;
+
+                // 设置列
+                const columns = sheetData.headers.map((header, idx) => ({
+                    header: header,
+                    key: `h${idx + 1}`,
+                    width: 15
+                }));
+                worksheet.columns = columns;
+
+                // 设置表头样式
+                worksheet.getRow(1).eachCell(cell => {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B0000' } };
+                    cell.font = { color: { argb: 'FFFFFFFF' }, bold: true };
+                });
+
+                // 添加数据行
+                sheetData.rows.forEach(row => {
+                    const dataRow = row.slice(1);
+                    worksheet.addRow(dataRow);
+                });
+
+                // 计算当前Sheet的总费用
+                let sheetFee = 0;
+                if (sheetConfig?.totalFields && sheetConfig.totalFields.length > 0) {
+                    sheetConfig.totalFields.forEach(field => {
+                        const colIndex = parseInt(field.replace('h', '')) - 1;
+                        const colSum = sheetData.rows.reduce((acc, row) => {
+                            const val = Number(row[colIndex + 1]) || 0;
+                            return acc + val;
+                        }, 0);
+                        sheetFee += colSum;
+                    });
+                }
+
+                // 添加合计行到Sheet底部
+                if (sheetConfig?.totalFields && sheetConfig.totalFields.length > 0) {
+                    const totalRowData = new Array(sheetData.headers.length).fill('');
+                    totalRowData[0] = '合计';
+                    
+                    sheetConfig.totalFields.forEach(field => {
+                        const colIndex = parseInt(field.replace('h', '')) - 1;
+                        const sum = sheetData.rows.reduce((acc, row) => {
+                            const val = Number(row[colIndex + 1]) || 0;
+                            return acc + val;
+                        }, 0);
+                        totalRowData[colIndex] = sum;
+                    });
+                    
+                    const totalRowObj = worksheet.addRow(totalRowData);
+                    totalRowObj.font = { bold: true };
+                }
+
+                // 汇总表添加当前Sheet行
+                const rowCount = sheetData.rows.length;
+                summarySheet.addRow({ 
+                    project: sheetName, 
+                    count: rowCount, 
+                    fee: sheetFee 
+                });
+
+                // 保存到汇总数据数组
+                summaryData.push({
+                    project: sheetName,
+                    count: rowCount,
+                    fee: sheetFee
+                });
+            });
+
+            // 汇总表添加总计行
+            const totalCount = summaryData.reduce((acc, item) => acc + item.count, 0);
+            const totalFee = summaryData.reduce((acc, item) => acc + item.fee, 0);
+            summarySheet.addRow({ 
+                project: '总计', 
+                count: totalCount, 
+                fee: totalFee 
+            });
+            summarySheet.lastRow.font = { bold: true };
+
+            // 计算结果卡片数据
+            const cardTotalCount = summaryData.length > 0 ? summaryData[0].count : 0;
+            const cardFreightFee = summaryData.length > 0 ? summaryData[0].fee : 0;
+            const cardAfterSaleFee = summaryData.length > 1 
+                ? summaryData.slice(1).reduce((acc, item) => acc + item.fee, 0) 
+                : 0;
+
+            // 生成文件
+            const buffer = await workbook.xlsx.writeBuffer();
+            const fileName = `${config.name}-${merchantName}${monthStr}月账单-${dateStr}.xlsx`;
+
+            return {
+                buffer: buffer,
+                fileName: fileName,
+                stats: {
+                    merchantName: merchantName,
+                    totalCount: cardTotalCount,
+                    totalFreight: cardFreightFee.toFixed(2),
+                    totalAfterSale: cardAfterSaleFee.toFixed(2),
+                    totalAmount: totalFee.toFixed(2)
+                }
+            };
+        }
+
+        // ===================== 渲染函数 =====================
+        // 渲染报价表列表
+        function renderQuotationList() {
+            const allQuotations = getAllQuotations();
+            const listContainer = document.getElementById('quotation-list');
+            const merchantSelect = document.getElementById('generate-merchant');
+            
+            listContainer.innerHTML = '';
+            merchantSelect.innerHTML = '<option value="">请选择商家</option><option value="all">全部已导入商家</option>';
+
+            const merchantNames = Object.keys(allQuotations);
+            if (merchantNames.length === 0) {
+                listContainer.innerHTML = '<p style="text-align: center; color: var(--light-text); padding: 40px 0;">暂无导入的报价表，请先导入</p>';
+                return;
+            }
+
+            merchantNames.forEach(merchantName => {
+                const quotationData = allQuotations[merchantName];
+                const destCount = quotationData.length;
+
+                const listItem = document.createElement('div');
+                listItem.className = 'list-item';
+                listItem.innerHTML = `
+                    <div class="list-item-left">
+                        <input type="checkbox" class="quotation-checkbox" value="${merchantName}">
+                        <div>
+                            <strong>${merchantName}</strong>
+                            <p style="font-size: 12px; color: var(--light-text);">包含 ${destCount} 个目的地报价</p>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-default quotation-download" data-name="${merchantName}">下载</button>
+                        <button class="btn btn-danger quotation-delete" data-name="${merchantName}">删除</button>
+                    </div>
+                `;
+                listContainer.appendChild(listItem);
+
+                const option = document.createElement('option');
+                option.value = merchantName;
+                option.textContent = merchantName;
+                merchantSelect.appendChild(option);
+            });
+        }
+
+        // 渲染配置列表
+        function renderConfigList() {
+            const allConfigs = getAllConfigs();
+            const listContainer = document.getElementById('config-list');
+            const configSelect = document.getElementById('generate-config');
+            
+            listContainer.innerHTML = '';
+            configSelect.innerHTML = '<option value="">请选择配置</option>';
+
+            const configNames = Object.keys(allConfigs);
+            if (configNames.length === 0) {
+                listContainer.innerHTML = '<p style="text-align: center; color: var(--light-text); padding: 40px 0;">暂无保存的配置，请先创建配置</p>';
+                return;
+            }
+
+            configNames.forEach(configName => {
+                const configData = allConfigs[configName];
+                const sheetCount = configData.sheetConfigs ? Object.keys(configData.sheetConfigs).length : 1;
+
+                const listItem = document.createElement('div');
+                listItem.className = 'list-item';
+                listItem.innerHTML = `
+                    <div class="list-item-left">
+                        <input type="checkbox" class="config-checkbox" value="${configName}">
+                        <div>
+                            <strong>${configName}</strong>
+                            <p style="font-size: 12px; color: var(--light-text);">包含 ${sheetCount} 个工作表配置 | 创建时间：${configData.createTime || '未知'}</p>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn btn-info config-edit" data-name="${configName}">编辑</button>
+                        <button class="btn btn-default config-download" data-name="${configName}">下载</button>
+                        <button class="btn btn-danger config-delete" data-name="${configName}">删除</button>
+                    </div>
+                `;
+                listContainer.appendChild(listItem);
+
+                const option = document.createElement('option');
+                option.value = configName;
+                option.textContent = configName;
+                configSelect.appendChild(option);
+            });
+        }
+
+        // 渲染Sheet标签
+        function renderSheetTabs(sheets) {
+            const sheetTabsContainer = document.getElementById('bill-sheet-tabs');
+            sheetTabsContainer.innerHTML = '';
+            sheetTabsContainer.style.display = 'flex';
+
+            sheets.forEach((sheet, index) => {
+                const sheetTab = document.createElement('div');
+                sheetTab.className = `sheet-tab ${index === 0 ? 'active' : ''}`;
+                sheetTab.dataset.index = index;
+                sheetTab.dataset.name = sheet.name;
+                sheetTab.textContent = sheet.name;
+                sheetTabsContainer.appendChild(sheetTab);
+            });
+        }
+
+        // 渲染Sheet表头
+        function renderSheetHeaders(sheetIndex) {
+            const sheet = currentAggregateBill[sheetIndex];
+            if (!sheet || sheet.rows.length === 0) {
+                showMessage('当前工作表无数据', 'warning');
+                return;
+            }
+
+            const headerRow = sheet.rows[0];
+            currentHeaders = [];
+            for (let i = 1; i < headerRow.length; i++) {
+                currentHeaders.push(headerRow[i] || `列${i}`);
+            }
+
+            document.getElementById('current-sheet-name').textContent = sheet.name;
+
+            const headerBlocksContainer = document.getElementById('header-blocks-container');
+            const headerBlocks = document.getElementById('header-blocks');
+            const dropAreasContainer = document.getElementById('drop-areas-container');
+            
+            headerBlocks.innerHTML = '';
+            headerBlocksContainer.style.display = 'block';
+            dropAreasContainer.style.display = 'block';
+
+            currentHeaders.forEach((header, index) => {
+                const block = document.createElement('div');
+                block.className = 'header-block';
+                block.draggable = true;
+                block.dataset.field = `h${index + 1}`;
+                block.dataset.header = header;
+                block.textContent = `h${index + 1}: ${header}`;
+                headerBlocks.appendChild(block);
+            });
+        }
+
+        // 渲染生成结果卡片
+        function renderResultCards(bills) {
+            const resultContainer = document.getElementById('generate-result-container');
+            const cardsContainer = document.getElementById('result-cards');
+            cardsContainer.innerHTML = '';
+
+            const merchantNames = Object.keys(bills);
+            if (merchantNames.length === 0) {
+                showMessage('未匹配到任何商家的有效账单数据', 'warning');
+                resultContainer.style.display = 'none';
+                return;
+            }
+
+            merchantNames.forEach(merchantName => {
+                const bill = bills[merchantName];
+                const card = document.createElement('div');
+                card.className = 'result-card';
+                card.innerHTML = `
+                    <h3>${merchantName}</h3>
+                    <div class="card-info">
+                        <p><span>发货总条数：</span><span>${bill.stats.totalCount}</span></p>
+                        <p><span>快递费小计：</span><span>¥ ${bill.stats.totalFreight}</span></p>
+                        <p><span>售后费用：</span><span>¥ ${bill.stats.totalAfterSale}</span></p>
+                        <p><span>合计金额：</span><span>¥ ${bill.stats.totalAmount}</span></p>
+                    </div>
+                    <button class="btn btn-primary download-single-btn" data-merchant="${merchantName}">下载对账单</button>
+                `;
+                cardsContainer.appendChild(card);
+            });
+
+            resultContainer.style.display = 'block';
+        }
+
+        // ===================== 事件监听函数 =====================
+        // Tab切换事件
+        function initTabEvents() {
+            // 主Tab切换
+            document.querySelectorAll('.main-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                    tab.classList.add('active');
+                    const tabId = tab.dataset.tab;
+                    document.getElementById(`${tabId}-tab`).classList.add('active');
+                });
+            });
+
+            // 子Tab切换
+            document.querySelectorAll('.sub-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const parentTab = tab.closest('.tab-content').id;
+                    document.querySelectorAll(`#${parentTab} .sub-tab`).forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll(`#${parentTab} .sub-tab-content`).forEach(c => c.classList.remove('active'));
+                    tab.classList.add('active');
+                    const subtabId = tab.dataset.subtab;
+                    document.getElementById(`${subtabId}-content`).classList.add('active');
+                });
+            });
+        }
+
+        // 报价表上传事件
+        function initQuotationUploadEvents() {
+            const uploadArea = document.getElementById('quotation-upload-area');
+            const fileInput = document.getElementById('quotation-file-input');
+
+            uploadArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                await handleQuotationFile(file);
+                fileInput.value = '';
+            });
+
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+
+            uploadArea.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length === 0) return;
+                await handleQuotationFile(files[0]);
+            });
+        }
+
+        // 处理报价表文件
+        async function handleQuotationFile(file) {
+            if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+                showMessage('请上传.xlsx或.xls格式的Excel文件', 'error');
+                return;
+            }
+
+            const loadingMsg = showMessage('正在解析报价表...', 'loading');
+
+            try {
+                const sheets = await parseExcelFile(file);
+                const merchantQuotations = parseQuotationSheet(sheets);
+
+                const merchantCount = Object.keys(merchantQuotations).length;
+                if (merchantCount === 0) {
+                    throw new Error('未识别到有效的商家报价数据');
+                }
+
+                Object.keys(merchantQuotations).forEach(merchantName => {
+                    saveQuotation(merchantName, merchantQuotations[merchantName]);
+                });
+
+                loadingMsg.remove();
+                showMessage(`成功导入 ${merchantCount} 个商家的报价表`, 'success');
+                renderQuotationList();
+                document.querySelector('.sub-tab[data-subtab="quotation-manage"]').click();
+
+            } catch (error) {
+                loadingMsg.remove();
+                showMessage(`解析失败：${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        // 报价表管理事件
+        function initQuotationManageEvents() {
+            // 全选
+            document.getElementById('quotation-select-all').addEventListener('change', (e) => {
+                const checked = e.target.checked;
+                document.querySelectorAll('.quotation-checkbox').forEach(cb => {
+                    cb.checked = checked;
+                });
+            });
+
+            // 单个删除/下载
+            document.getElementById('quotation-list').addEventListener('click', (e) => {
+                if (e.target.classList.contains('quotation-delete')) {
+                    const merchantName = e.target.dataset.name;
+                    if (confirm(`确定要删除【${merchantName}】的报价表吗？此操作不可恢复`)) {
+                        deleteQuotation(merchantName);
+                        showMessage(`已删除【${merchantName}】的报价表`, 'success');
+                        renderQuotationList();
+                    }
+                }
+
+                if (e.target.classList.contains('quotation-download')) {
+                    const merchantName = e.target.dataset.name;
+                    const quotationData = getQuotation(merchantName);
+                    if (!quotationData) return;
+
+                    const workbook = new ExcelJS.Workbook();
+                    const worksheet = workbook.addWorksheet(merchantName);
+                    const headers = Object.keys(quotationData[0]);
+                    worksheet.columns = headers.map(header => ({
+                        header: header,
+                        key: header,
+                        width: 20
+                    }));
+                    quotationData.forEach(item => worksheet.addRow(item));
+                    workbook.xlsx.writeBuffer().then(buffer => {
+                        const blob = new Blob([buffer], { type: 'application/octet-stream' });
+                        saveAs(blob, `${merchantName}快递报价表.xlsx`);
+                    });
+                }
+            });
+
+            // 批量删除
+            document.getElementById('quotation-batch-delete').addEventListener('click', () => {
+                const checkedBoxes = document.querySelectorAll('.quotation-checkbox:checked');
+                if (checkedBoxes.length === 0) {
+                    showMessage('请先选择要删除的报价表', 'warning');
+                    return;
+                }
+
+                if (confirm(`确定要删除选中的 ${checkedBoxes.length} 个报价表吗？此操作不可恢复`)) {
+                    checkedBoxes.forEach(cb => {
+                        deleteQuotation(cb.value);
+                    });
+                    showMessage(`成功删除 ${checkedBoxes.length} 个报价表`, 'success');
+                    renderQuotationList();
+                    document.getElementById('quotation-select-all').checked = false;
+                }
+            });
+
+            // 批量下载
+            document.getElementById('quotation-batch-download').addEventListener('click', async () => {
+                const checkedBoxes = document.querySelectorAll('.quotation-checkbox:checked');
+                if (checkedBoxes.length === 0) {
+                    showMessage('请先选择要下载的报价表', 'warning');
+                    return;
+                }
+
+                const zip = new JSZip();
+                for (let cb of checkedBoxes) {
+                    const merchantName = cb.value;
+                    const quotationData = getQuotation(merchantName);
+                    if (!quotationData) continue;
+
+                    const workbook = new ExcelJS.Workbook();
+                    const worksheet = workbook.addWorksheet(merchantName);
+                    const headers = Object.keys(quotationData[0]);
+                    worksheet.columns = headers.map(header => ({
+                        header: header,
+                        key: header,
+                        width: 20
+                    }));
+                    quotationData.forEach(item => worksheet.addRow(item));
+                    const buffer = await workbook.xlsx.writeBuffer();
+                    zip.file(`${merchantName}快递报价表.xlsx`, buffer);
+                }
+
+                zip.generateAsync({ type: 'blob' }).then(content => {
+                    saveAs(content, `快递报价表批量下载_${formatDate(new Date())}.zip`);
+                });
+            });
+        }
+
+        // 聚合账单上传事件
+        function initBillUploadEvents() {
+            const uploadArea = document.getElementById('bill-upload-area');
+            const fileInput = document.getElementById('bill-file-input');
+
+            uploadArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                await handleBillFile(file);
+                fileInput.value = '';
+            });
+
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+
+            uploadArea.addEventListener('drop', async (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = e.dataTransfer.files;
+                if (files.length === 0) return;
+                await handleBillFile(files[0]);
+            });
+        }
+
+        // 处理聚合账单文件
+        async function handleBillFile(file) {
+            if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+                showMessage('请上传.xlsx或.xls格式的Excel文件', 'error');
+                return;
+            }
+
+            const loadingMsg = showMessage('正在解析聚合账单...', 'loading');
+
+            try {
+                const sheets = await parseExcelFile(file);
+                if (sheets.length === 0) {
+                    throw new Error('Excel文件中未找到有效的工作表');
+                }
+
+                // 上传真实文件，退出离线编辑模式
+                isOfflineEditMode = false;
+                currentAggregateBill = sheets;
+                currentSheetIndex = 0;
+                currentSheetConfigs = {};
+                sheets.forEach(sheet => {
+                    currentSheetConfigs[sheet.name] = {
+                        merchantField: null,
+                        freightField: null,
+                        weightField: null,
+                        destinationField: null,
+                        subtotalFields: [],
+                        totalFields: [],
+                        headers: []
+                    };
+                });
+
+                loadingMsg.remove();
+                
+                // 显示真实文件信息
+                resetFileInfo();
+                const fileInfo = document.getElementById('bill-file-info');
+                const fileNameDisplay = document.getElementById('bill-file-name');
+                fileNameDisplay.textContent = file.name;
+                fileInfo.classList.add('show');
+                
+                showMessage(`成功解析账单，共 ${sheets.length} 个工作表，每个工作表配置独立`, 'success');
+
+                // 自动切换到手动配置Tab
+                document.querySelector('.sub-tab[data-subtab="config-manual"]').click();
+                // 渲染Sheet标签
+                renderSheetTabs(sheets);
+                // 渲染第一个Sheet的表头和配置
+                renderSheetHeaders(0);
+                const firstSheet = sheets[0];
+                currentSheetConfigs[firstSheet.name].headers = currentHeaders;
+
+            } catch (error) {
+                loadingMsg.remove();
+                showMessage(`解析失败：${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+
+        // Sheet切换事件
+        function initSheetTabEvents() {
+            document.getElementById('bill-sheet-tabs').addEventListener('click', (e) => {
+                if (e.target.classList.contains('sheet-tab')) {
+                    const index = parseInt(e.target.dataset.index);
+                    const sheetName = e.target.dataset.name;
+                    if (isNaN(index) || !sheetName) return;
+
+                    // 保存当前Sheet配置
+                    const currentSheetName = currentAggregateBill[currentSheetIndex]?.name;
+                    if (currentSheetName) {
+                        const currentConfig = getCurrentSheetConfig();
+                        if (currentConfig) {
+                            currentSheetConfigs[currentSheetName] = currentConfig;
+                        }
+                    }
+
+                    // 更新当前索引
+                    document.querySelectorAll('.sheet-tab').forEach(t => t.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentSheetIndex = index;
+
+                    // 渲染目标Sheet
+                    renderSheetHeaders(index);
+                    const targetConfig = currentSheetConfigs[sheetName];
+                    if (targetConfig) {
+                        targetConfig.headers = currentHeaders;
+                        renderConfigToUI(targetConfig);
+                    }
+
+                    updateSheetConfigMark();
+                    showMessage(`已切换到工作表【${sheetName}】，自动加载对应配置`, 'success');
+                }
+            });
+        }
+
+        // 拖拽事件
+        function initDragEvents() {
+            let draggedElement = null;
+
+            document.addEventListener('dragstart', (e) => {
+                if (e.target.classList.contains('header-block')) {
+                    draggedElement = e.target.cloneNode(true);
+                    e.dataTransfer.setData('text/plain', JSON.stringify({
+                        field: e.target.dataset.field,
+                        header: e.target.dataset.header
+                    }));
+                    e.target.style.opacity = '0.5';
+                }
+            });
+
+            document.addEventListener('dragend', (e) => {
+                if (e.target.classList.contains('header-block')) {
+                    e.target.style.opacity = '1';
+                    draggedElement = null;
+                }
+            });
+
+            document.querySelectorAll('.drop-area').forEach(area => {
+                area.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    area.classList.add('dragover');
+                });
+
+                area.addEventListener('dragleave', () => {
+                    area.classList.remove('dragover');
+                });
+
+                area.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    area.classList.remove('dragover');
+
+                    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+                    if (!data) return;
+
+                    const dropContent = area.querySelector('.drop-content');
+                    const areaId = area.id;
+
+                    // 单元素区域限制
+                    if ((areaId === 'merchant-drop-area' || areaId === 'freight-drop-area') && dropContent.children.length > 0) {
+                        showMessage(areaId === 'merchant-drop-area' ? '商家名称区域仅可设置一个列' : '运费计算区域仅可设置一个列', 'warning');
+                        return;
+                    }
+
+                    // 重复添加检查
+                    const existing = dropContent.querySelector(`[data-field="${data.field}"]`);
+                    if (existing) {
+                        showMessage('该列已添加到当前区域', 'warning');
+                        return;
+                    }
+
+                    // 创建配置项
+                    const configItem = createConfigItem(data.field, data.header);
+
+                    // 运费区域添加重量和目的地选择
+                    if (areaId === 'freight-drop-area') {
+                        const weightRow = document.createElement('div');
+                        weightRow.className = 'config-row';
+                        weightRow.innerHTML = `
+                            <label>重量列：</label>
+                            <select class="weight-select">
+                                ${currentHeaders.map((h, idx) => `<option value="h${idx + 1}">h${idx + 1}: ${h}</option>`).join('')}
+                            </select>
+                            <label>目的地列：</label>
+                            <select class="destination-select">
+                                ${currentHeaders.map((h, idx) => `<option value="h${idx + 1}">h${idx + 1}: ${h}</option>`).join('')}
+                            </select>
+                        `;
+                        configItem.appendChild(weightRow);
+                    }
+
+                    // 小计区域添加公式输入
+                    if (areaId === 'subtotal-drop-area') {
+                        const formulaRow = document.createElement('div');
+                        formulaRow.className = 'config-row';
+                        formulaRow.innerHTML = `
+                            <label>计算公式：</label>
+                            <input type="text" class="formula-input" placeholder="例如：h2 + h3" style="flex: 1;">
+                        `;
+                        configItem.appendChild(formulaRow);
+                    }
+
+                    dropContent.appendChild(configItem);
+                });
+            });
+        }
+
+        // 保存配置事件
+        function initSaveConfigEvent() {
+            document.getElementById('save-config-btn').addEventListener('click', () => {
+                const configName = document.getElementById('config-name').value.trim();
+                if (!configName) {
+                    showMessage('请输入配置名称', 'warning');
+                    return;
+                }
+
+                if (!currentAggregateBill) {
+                    showMessage('无可用的工作表数据，请先上传账单文件或编辑已保存的配置', 'warning');
+                    return;
+                }
+
+                // 保存当前Sheet配置
+                const currentSheetName = currentAggregateBill[currentSheetIndex]?.name;
+                if (currentSheetName) {
+                    const currentConfig = getCurrentSheetConfig();
+                    if (currentConfig) {
+                        currentSheetConfigs[currentSheetName] = currentConfig;
+                    }
+                }
+
+                // 检查有效配置
+                let hasValidConfig = false;
+                Object.values(currentSheetConfigs).forEach(config => {
+                    if (config.merchantField || config.freightField || config.subtotalFields.length > 0 || config.totalFields.length > 0) {
+                        hasValidConfig = true;
+                    }
+                });
+
+                if (!hasValidConfig) {
+                    showMessage('请至少为一个工作表配置规则', 'warning');
+                    return;
+                }
+
+                // 构建配置对象
+                const configData = {
+                    name: configName,
+                    sheetConfigs: currentSheetConfigs,
+                    createTime: new Date().toLocaleString()
+                };
+
+                saveConfig(configName, configData);
+                showMessage(`配置【${configName}】保存成功，共包含 ${Object.keys(currentSheetConfigs).length} 个工作表配置`, 'success');
+                updateSheetConfigMark();
+                renderConfigList();
+                document.querySelector('.sub-tab[data-subtab="config-manage"]').click();
+            });
+        }
+
+        // 配置管理事件（核心修复：编辑配置逻辑）
+        function initConfigManageEvents() {
+            // 全选
+            document.getElementById('config-select-all').addEventListener('change', (e) => {
+                const checked = e.target.checked;
+                document.querySelectorAll('.config-checkbox').forEach(cb => {
+                    cb.checked = checked;
+                });
+            });
+
+            // 导入配置
+            document.getElementById('config-import-btn').addEventListener('click', () => {
+                document.getElementById('config-file-input').click();
+            });
+
+            document.getElementById('config-file-input').addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const configData = JSON.parse(event.target.result);
+                        if (!configData.name) {
+                            throw new Error('配置文件格式错误，缺少配置名称');
+                        }
+
+                        saveConfig(configData.name, configData);
+                        showMessage(`配置【${configData.name}】导入成功`, 'success');
+                        renderConfigList();
+                    } catch (error) {
+                        showMessage(`配置导入失败：${error.message}`, 'error');
+                    }
+                };
+                reader.readAsText(file);
+            });
+
+            // 单个编辑（核心修复：离线编辑逻辑）
+            document.getElementById('config-list').addEventListener('click', (e) => {
+                if (e.target.classList.contains('config-edit')) {
+                    const configName = e.target.dataset.name;
+                    const configData = getConfig(configName);
+                    if (!configData) return;
+
+                    // 填充配置名称
+                    document.getElementById('config-name').value = configData.name;
+                    // 自动切换到手动配置Tab
+                    document.querySelector('.sub-tab[data-subtab="config-manual"]').click();
+
+                    // 兼容旧版单Sheet配置
+                    if (!configData.sheetConfigs) {
+                        showMessage('检测到旧版单Sheet配置，已自动转换为多Sheet格式', 'warning');
+                        currentSheetConfigs = { '默认工作表': configData };
+                        // 生成虚拟账单数据
+                        currentAggregateBill = generateVirtualBillFromConfig(configData);
+                    } else {
+                        // 新版多Sheet配置
+                        currentSheetConfigs = configData.sheetConfigs;
+                        // 生成虚拟账单数据
+                        currentAggregateBill = generateVirtualBillFromConfig(configData);
+                    }
+
+                    // 开启离线编辑模式
+                    isOfflineEditMode = true;
+                    // 设置离线编辑文件信息
+                    setOfflineFileInfo(configName);
+
+                    // 渲染Sheet标签
+                    renderSheetTabs(currentAggregateBill);
+                    // 渲染第一个Sheet的表头和配置
+                    currentSheetIndex = 0;
+                    const firstSheetName = currentAggregateBill[0].name;
+                    renderSheetHeaders(0);
+                    const firstConfig = currentSheetConfigs[firstSheetName];
+                    if (firstConfig) {
+                        firstConfig.headers = currentHeaders;
+                        renderConfigToUI(firstConfig);
+                    }
+
+                    // 更新已配置标记
+                    updateSheetConfigMark();
+                    // 提示信息
+                    showMessage(`已进入【${configName}】的离线编辑模式，无需上传文件即可修改配置`, 'info');
+                }
+
+                // 单个下载
+                if (e.target.classList.contains('config-download')) {
+                    const configName = e.target.dataset.name;
+                    const configData = getConfig(configName);
+                    if (!configData) return;
+
+                    const blob = new Blob([JSON.stringify(configData, null, 2)], { type: 'application/json' });
+                    saveAs(blob, `${configName}账单配置.json`);
+                }
+
+                // 单个删除
+                if (e.target.classList.contains('config-delete')) {
+                    const configName = e.target.dataset.name;
+                    if (confirm(`确定要删除配置【${configName}】吗？此操作不可恢复`)) {
+                        deleteConfig(configName);
+                        showMessage(`已删除配置【${configName}】`, 'success');
+                        renderConfigList();
+                    }
+                }
+            });
+
+            // 批量下载
+            document.getElementById('config-batch-download').addEventListener('click', async () => {
+                const checkedBoxes = document.querySelectorAll('.config-checkbox:checked');
+                if (checkedBoxes.length === 0) {
+                    showMessage('请先选择要下载的配置', 'warning');
+                    return;
+                }
+
+                const zip = new JSZip();
+                checkedBoxes.forEach(cb => {
+                    const configName = cb.value;
+                    const configData = getConfig(configName);
+                    if (configData) {
+                        zip.file(`${configName}账单配置.json`, JSON.stringify(configData, null, 2));
+                    }
+                });
+
+                zip.generateAsync({ type: 'blob' }).then(content => {
+                    saveAs(content, `账单配置批量下载_${formatDate(new Date())}.zip`);
+                });
+            });
+
+            // 批量删除
+            document.getElementById('config-batch-delete').addEventListener('click', () => {
+                const checkedBoxes = document.querySelectorAll('.config-checkbox:checked');
+                if (checkedBoxes.length === 0) {
+                    showMessage('请先选择要删除的配置', 'warning');
+                    return;
+                }
+
+                if (confirm(`确定要删除选中的 ${checkedBoxes.length} 个配置吗？此操作不可恢复`)) {
+                    checkedBoxes.forEach(cb => {
+                        deleteConfig(cb.value);
+                    });
+                    showMessage(`成功删除 ${checkedBoxes.length} 个配置`, 'success');
+                    renderConfigList();
+                    document.getElementById('config-select-all').checked = false;
+                }
+            });
+        }
+
+        // 账单生成事件
+        function initGenerateEvents() {
+            // 生成账单
+            document.getElementById('generate-bill-btn').addEventListener('click', async () => {
+                const merchantValue = document.getElementById('generate-merchant').value;
+                const configName = document.getElementById('generate-config').value;
+                const month = document.getElementById('generate-month').value;
+
+                if (!merchantValue) {
+                    showMessage('请选择目标商家', 'warning');
+                    return;
+                }
+
+                if (!configName) {
+                    showMessage('请选择配置规则', 'warning');
+                    return;
+                }
+
+                if (!month) {
+                    showMessage('请选择账单月份', 'warning');
+                    return;
+                }
+
+                if (!currentAggregateBill || isOfflineEditMode) {
+                    showMessage('请先上传真实的聚合账单(表B)文件，再生成对账单', 'warning');
+                    return;
+                }
+
+                const config = getConfig(configName);
+                if (!config) {
+                    showMessage('所选配置不存在', 'error');
+                    return;
+                }
+
+                // 兼容旧版配置
+                let sheetConfigs = {};
+                if (config.sheetConfigs) {
+                    sheetConfigs = config.sheetConfigs;
+                } else {
+                    showMessage('检测到旧版单Sheet配置，所有工作表将使用同一套规则', 'warning');
+                    currentAggregateBill.forEach(sheet => {
+                        sheetConfigs[sheet.name] = config;
+                    });
+                }
+
+                // 确定商家列表
+                let targetMerchants = [];
+                const allQuotations = getAllQuotations();
+                if (merchantValue === 'all') {
+                    targetMerchants = Object.keys(allQuotations);
+                } else {
+                    targetMerchants = [merchantValue];
+                }
+
+                if (targetMerchants.length === 0) {
+                    showMessage('无可用的商家报价表', 'error');
+                    return;
+                }
+
+                const loadingMsg = showMessage('正在生成对账单，请稍候...', 'loading');
+                generatedBills = {};
+
+                try {
+                    // 遍历每个商家
+                    for (const merchantName of targetMerchants) {
+                        const quotation = getQuotation(merchantName);
+                        if (!quotation) continue;
+
+                        // 处理每个Sheet
+                        const processedSheets = [];
+                        currentAggregateBill.forEach(sheet => {
+                            if (sheet.rows.length < 2) return;
+
+                            const sheetConfig = sheetConfigs[sheet.name];
+                            if (!sheetConfig) return;
+
+                            const headerRow = sheet.rows[0];
+                            const dataRows = sheet.rows.slice(1);
+                            
+                            // 商家过滤
+                            let filteredRows = dataRows;
+                            if (sheetConfig.merchantField) {
+                                const merchantColIndex = parseInt(sheetConfig.merchantField.replace('h', ''));
+                                filteredRows = dataRows.filter(row => {
+                                    const merchantCell = String(row[merchantColIndex] || '').trim();
+                                    return merchantCell === merchantName;
+                                });
+                            }
+
+                            if (filteredRows.length === 0) return;
+
+                            // 处理每行数据
+                            const processedRows = filteredRows.map(row => {
+                                const newRow = [...row];
+                                
+                                // 运费计算
+                                if (sheetConfig.freightField && sheetConfig.weightField && sheetConfig.destinationField) {
+                                    const freightColIndex = parseInt(sheetConfig.freightField.replace('h', ''));
+                                    const weightColIndex = parseInt(sheetConfig.weightField.replace('h', ''));
+                                    const destColIndex = parseInt(sheetConfig.destinationField.replace('h', ''));
+                                    
+                                    const weight = Number(row[weightColIndex]) || 0;
+                                    const destination = String(row[destColIndex] || '').trim();
+                                    const freight = calculateFreight(weight, destination, quotation);
+                                    newRow[freightColIndex] = freight;
+                                }
+
+                                // 小计计算
+                                if (sheetConfig.subtotalFields && sheetConfig.subtotalFields.length > 0) {
+                                    sheetConfig.subtotalFields.forEach(subtotal => {
+                                        const colIndex = parseInt(subtotal.field.replace('h', ''));
+                                        const rowData = {};
+                                        for (let i = 1; i < newRow.length; i++) {
+                                            rowData[`h${i}`] = newRow[i];
+                                        }
+                                        const value = calculateFormula(subtotal.formula, rowData);
+                                        newRow[colIndex] = value;
+                                    });
+                                }
+
+                                return newRow;
+                            });
+
+                            processedSheets.push({
+                                originalName: sheet.name,
+                                headers: headerRow.slice(1),
+                                rows: processedRows,
+                                sheetConfig: sheetConfig
+                            });
+                        });
+
+                        if (processedSheets.length === 0) continue;
+
+                        // 生成Excel
+                        const excelResult = await generateExcelFile(merchantName, config, processedSheets, month);
+                        generatedBills[merchantName] = excelResult;
+                    }
+
+                    loadingMsg.remove();
+                    if (Object.keys(generatedBills).length === 0) {
+                        showMessage('未匹配到任何商家的有效账单数据', 'warning');
+                        return;
+                    }
+
+                    showMessage(`成功生成 ${Object.keys(generatedBills).length} 个商家的对账单`, 'success');
+                    renderResultCards(generatedBills);
+
+                } catch (error) {
+                    loadingMsg.remove();
+                    showMessage(`生成失败：${error.message}`, 'error');
+                    console.error(error);
+                }
+            });
+
+            // 单个下载
+            document.getElementById('result-cards').addEventListener('click', (e) => {
+                if (e.target.classList.contains('download-single-btn')) {
+                    const merchantName = e.target.dataset.merchant;
+                    const bill = generatedBills[merchantName];
+                    if (!bill) return;
+
+                    const blob = new Blob([bill.buffer], { type: 'application/octet-stream' });
+                    saveAs(blob, bill.fileName);
+                }
+            });
+
+            // 全部下载
+            document.getElementById('download-all-btn').addEventListener('click', async () => {
+                const merchantNames = Object.keys(generatedBills);
+                if (merchantNames.length === 0) {
+                    showMessage('无可用的账单文件', 'warning');
+                    return;
+                }
+
+                const zip = new JSZip();
+                merchantNames.forEach(merchantName => {
+                    const bill = generatedBills[merchantName];
+                    zip.file(bill.fileName, bill.buffer);
+                });
+
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+                saveAs(zipBlob, `商家对账单批量下载_${formatDate(new Date())}.zip`);
+            });
+        }
+
+        // 页面初始化
+        function init() {
+            initTabEvents();
+            initQuotationUploadEvents();
+            initQuotationManageEvents();
+            initBillUploadEvents();
+            initSheetTabEvents();
+            initDragEvents();
+            initSaveConfigEvent();
+            initConfigManageEvents();
+            initGenerateEvents();
+            renderQuotationList();
+            renderConfigList();
+            // 设置默认月份
+            const now = new Date();
+            const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            document.getElementById('generate-month').value = defaultMonth;
+        }
+
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
